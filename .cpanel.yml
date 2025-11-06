@@ -1,0 +1,56 @@
+---
+# 🚀 ملف إعداد Git Deployment التلقائي لـ cPanel
+# Automatic/Push Deployment - يتم التنفيذ تلقائياً عند git push
+# هذا الملف يجب أن يكون في الجذر (root) للمستودع
+
+deployment:
+  tasks:
+    # تحديد مسارات المجلدات
+    # في cPanel، المستودع يكون عادة في ~/repositories/repo-name.git
+    # والمجلد الحالي هو working directory للمستودع
+    - export DEPLOYPATH=$HOME/public_html
+    - export PROJECTPATH=$HOME/whatsapp-clone
+    - export REPOPATH=$(pwd)
+    
+    # إنشاء مجلد المشروع إذا لم يكن موجوداً
+    - mkdir -p $PROJECTPATH
+    
+    # نسخ جميع ملفات Laravel من المستودع إلى مجلد المشروع
+    # استثناء: node_modules, vendor, .git, storage (لأنها قد تحتوي على بيانات)
+    - /bin/cp -R app bootstrap config database resources routes tests $PROJECTPATH/ 2>/dev/null || true
+    - /bin/cp artisan composer.json composer.lock package.json package-lock.json $PROJECTPATH/ 2>/dev/null || true
+    - /bin/cp vite.config.ts tsconfig.json tailwind.config.js $PROJECTPATH/ 2>/dev/null || true
+    - /bin/cp .htaccess $PROJECTPATH/ 2>/dev/null || true
+    
+    # نسخ محتويات مجلد public إلى public_html
+    - /bin/cp -R public/* $DEPLOYPATH/ 2>/dev/null || true
+    - /bin/cp public/.htaccess $DEPLOYPATH/ 2>/dev/null || true
+    
+    # الانتقال إلى مجلد المشروع
+    - cd $PROJECTPATH
+    
+    # تثبيت تبعيات Composer (تحديث إذا كانت موجودة)
+    - composer install --optimize-autoloader --no-dev --no-interaction
+    
+    # تثبيت تبعيات npm
+    - npm install --production
+    
+    # بناء الأصول (Assets) من Vite
+    - npm run build
+    
+    # نسخ مجلد build من public إلى public_html
+    - /bin/cp -R public/build $DEPLOYPATH/ 2>/dev/null || true
+    
+    # إنشاء رابط storage إذا لم يكن موجوداً
+    - if [ ! -L "$DEPLOYPATH/storage" ]; then cd $DEPLOYPATH && rm -rf storage && ln -s $PROJECTPATH/storage/app/public storage; fi
+    
+    # تعيين الصلاحيات للمجلدات المهمة
+    - chmod -R 775 storage
+    - chmod -R 775 bootstrap/cache
+    
+    # تحسين الأداء (Cache) - فقط إذا كان ملف .env موجود
+    - if [ -f .env ]; then php artisan config:cache 2>/dev/null || true; fi
+    - if [ -f .env ]; then php artisan route:cache 2>/dev/null || true; fi
+    - if [ -f .env ]; then php artisan view:cache 2>/dev/null || true; fi
+    - if [ -f .env ]; then php artisan event:cache 2>/dev/null || true; fi
+
