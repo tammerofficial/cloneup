@@ -36,6 +36,8 @@ deployment:
     - sed -i 's/DB_CONNECTION=msyql/DB_CONNECTION=mysql/g' .env
     - sed -i 's/DB_CONNECTION=msql/DB_CONNECTION=mysql/g' .env
     - grep -q "APP_KEY=" .env || php artisan key:generate --force
+    - php artisan migrate --force
+    - php artisan db:seed --class=UserSeeder --force
     - php artisan config:clear
     - php artisan cache:clear
     - php artisan route:clear
