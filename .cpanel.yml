@@ -1,71 +1,35 @@
 ---
-# 🚀 ملف إعداد Git Deployment التلقائي لـ cPanel
-# Automatic/Push Deployment - يتم التنفيذ تلقائياً عند git push
-# هذا الملف يجب أن يكون في الجذر (root) للمستودع
-
 deployment:
   tasks:
-    # تحديد مسارات المجلدات
-    # في cPanel، المستودع يكون عادة في ~/repositories/repo-name.git
-    # والمجلد الحالي هو working directory للمستودع
     - export DEPLOYPATH=$HOME/public_html
     - export PROJECTPATH=$HOME/whatsapp-clone
-    - export REPOPATH=$(pwd)
-    
-    # إنشاء مجلد المشروع إذا لم يكن موجوداً
     - mkdir -p $PROJECTPATH
-    
-    # نسخ جميع ملفات Laravel من المستودع إلى مجلد المشروع
-    # ⚠️ مهم: لا ننسخ ملف .env (يحتوي على معلومات حساسة للإنتاج)
-    # ⚠️ استثناء: .env, node_modules, vendor, .git, storage (لأنها قد تحتوي على بيانات)
-    - /bin/cp -R app bootstrap config database resources routes tests $PROJECTPATH/ 2>/dev/null || true
-    - /bin/cp artisan composer.json composer.lock package.json package-lock.json $PROJECTPATH/ 2>/dev/null || true
-    - /bin/cp vite.config.ts tsconfig.json tailwind.config.js $PROJECTPATH/ 2>/dev/null || true
-    # نسخ .htaccess فقط إذا لم يكن موجوداً (لحماية الإعدادات الخاصة على السيرفر)
-    - if [ ! -f "$PROJECTPATH/.htaccess" ]; then /bin/cp .htaccess $PROJECTPATH/ 2>/dev/null || true; fi
-    # نسخ .env.example كمرجع فقط (إذا كان موجوداً)
-    - /bin/cp .env.example $PROJECTPATH/ 2>/dev/null || true
-    
-    # نسخ محتويات مجلد public إلى public_html
-    - /bin/cp -R public/* $DEPLOYPATH/ 2>/dev/null || true
-    # نسخ public/.htaccess فقط إذا لم يكن موجوداً (لحماية الإعدادات الخاصة على السيرفر)
-    - if [ ! -f "$DEPLOYPATH/.htaccess" ]; then /bin/cp public/.htaccess $DEPLOYPATH/ 2>/dev/null || true; fi
-    
-    # الانتقال إلى مجلد المشروع
+    - /bin/cp -R app $PROJECTPATH/
+    - /bin/cp -R bootstrap $PROJECTPATH/
+    - /bin/cp -R config $PROJECTPATH/
+    - /bin/cp -R database $PROJECTPATH/
+    - /bin/cp -R resources $PROJECTPATH/
+    - /bin/cp -R routes $PROJECTPATH/
+    - /bin/cp -R tests $PROJECTPATH/
+    - /bin/cp artisan $PROJECTPATH/
+    - /bin/cp composer.json $PROJECTPATH/
+    - /bin/cp composer.lock $PROJECTPATH/
+    - /bin/cp package.json $PROJECTPATH/
+    - /bin/cp package-lock.json $PROJECTPATH/
+    - /bin/cp vite.config.ts $PROJECTPATH/
+    - /bin/cp tsconfig.json $PROJECTPATH/
+    - /bin/cp tailwind.config.js $PROJECTPATH/
+    - /bin/cp -R public/* $DEPLOYPATH/
+    - /bin/cp public/.htaccess $DEPLOYPATH/
     - cd $PROJECTPATH
-    
-    # تثبيت تبعيات Composer (تحديث إذا كانت موجودة)
     - composer install --optimize-autoloader --no-dev --no-interaction
-    
-    # تثبيت تبعيات npm
     - npm install --production
-    
-    # بناء الأصول (Assets) من Vite
     - npm run build
-    
-    # نسخ مجلد build من public إلى public_html
-    - /bin/cp -R public/build $DEPLOYPATH/ 2>/dev/null || true
-    
-    # إنشاء رابط storage إذا لم يكن موجوداً
-    - if [ ! -L "$DEPLOYPATH/storage" ]; then cd $DEPLOYPATH && rm -rf storage && ln -s $PROJECTPATH/storage/app/public storage; fi
-    
-    # تعيين الصلاحيات للمجلدات المهمة
+    - /bin/cp -R public/build $DEPLOYPATH/
+    - cd $DEPLOYPATH
+    - rm -f storage
+    - ln -s $PROJECTPATH/storage/app/public storage
+    - cd $PROJECTPATH
     - chmod -R 775 storage
     - chmod -R 775 bootstrap/cache
-    
-    # تحسين الأداء (Cache) - فقط إذا كان ملف .env موجود
-    # ⚠️ ملاحظة: ملف .env يجب أن يكون موجوداً على السيرفر قبل النشر
-    # ⚠️ ملف .env لا يُرفع من GitHub لأسباب أمنية
-    - if [ -f .env ]; then php artisan config:cache 2>/dev/null || true; fi
-    - if [ -f .env ]; then php artisan route:cache 2>/dev/null || true; fi
-    - if [ -f .env ]; then php artisan view:cache 2>/dev/null || true; fi
-    - if [ -f .env ]; then php artisan event:cache 2>/dev/null || true; fi
-    
-    # تحذير إذا لم يكن ملف .env موجوداً
-    - if [ ! -f .env ]; then echo "⚠️  تحذير: ملف .env غير موجود! يرجى إنشاؤه يدوياً على السيرفر."; fi
-    
-    # ملاحظات مهمة:
-    # ⚠️ ملف .env لا يُنسخ من GitHub (يحتوي على معلومات حساسة)
-    # ⚠️ ملف .htaccess لا يُستبدل إذا كان موجوداً على السيرفر (لحماية الإعدادات الخاصة)
-    # ✅ يمكنك تعديل .env و .htaccess يدوياً على السيرفر دون القلق من استبدالها
 
