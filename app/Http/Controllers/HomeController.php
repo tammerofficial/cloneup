@@ -71,7 +71,9 @@ class HomeController extends Controller
             'is_active' => true
         ]);
 
-        broadcast(new UserStatusChange(Auth::id(), true))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new UserStatusChange(Auth::id(), true))->toOthers();
+        }
 
         // Get all users except the current user
         $allUsers = User::query()
@@ -147,7 +149,9 @@ class HomeController extends Controller
             'user_two' => $partner['id']
         ]);
 
-        broadcast(new ChatStarted($chat))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new ChatStarted($chat))->toOthers();
+        }
 
         return response()->json(['chat_id' => $chat->id, 'created' => true]);
     }
@@ -320,7 +324,9 @@ class HomeController extends Controller
             })->toArray(),
         ];
 
-        broadcast(new MessageSent($messageData))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new MessageSent($messageData))->toOthers();
+        }
 
         return response()->json(['message' => $messageData]);
     }
@@ -357,7 +363,9 @@ class HomeController extends Controller
                 'is_active' => $validated['active']
             ]);
 
-        broadcast(new UserStatusChange(Auth::id(), $validated['active']))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new UserStatusChange(Auth::id(), $validated['active']))->toOthers();
+        }
     }
 
     public function updateMessageStatus(Request $request)
@@ -381,7 +389,9 @@ class HomeController extends Controller
                 'status' => MessageStatus::Read
             ]);
 
-            broadcast(new MessageRead($message->fresh()))->toOthers();
+            if (config('broadcasting.default') !== 'null') {
+                broadcast(new MessageRead($message->fresh()))->toOthers();
+            }
         }
     }
 
@@ -615,7 +625,9 @@ class HomeController extends Controller
         $reaction->load('user');
         $message->load('chat');
 
-        broadcast(new ReactionAdded($reaction, $message))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new ReactionAdded($reaction, $message))->toOthers();
+        }
 
         return response()->json([
             'reaction' => [
@@ -659,7 +671,9 @@ class HomeController extends Controller
         $reactionForBroadcast->id = $reactionData['id'];
         $message->load('chat');
 
-        broadcast(new ReactionRemoved($reactionForBroadcast, $message))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new ReactionRemoved($reactionForBroadcast, $message))->toOthers();
+        }
 
         return response()->json(['message' => 'Reaction removed successfully.']);
     }
@@ -737,7 +751,9 @@ class HomeController extends Controller
             'is_edited' => true,
         ]);
 
-        broadcast(new MessageUpdated($message))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new MessageUpdated($message))->toOthers();
+        }
 
         return response()->json([
             'message' => [
@@ -783,7 +799,9 @@ class HomeController extends Controller
             'deleted_at' => now(),
         ]);
 
-        broadcast(new MessageDeleted($message))->toOthers();
+        if (config('broadcasting.default') !== 'null') {
+            broadcast(new MessageDeleted($message))->toOthers();
+        }
 
         return response()->json([
             'message' => [
