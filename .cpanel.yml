@@ -36,6 +36,22 @@ deployment:
     - sed -i 's/DB_CONNECTION=msyql/DB_CONNECTION=mysql/g' .env
     - sed -i 's/DB_CONNECTION=msql/DB_CONNECTION=mysql/g' .env
     - grep -q "APP_KEY=" .env || php artisan key:generate --force
+    - grep -q "^BROADCAST_CONNECTION=" .env || echo "BROADCAST_CONNECTION=reverb" >> .env
+    - grep -q "^REVERB_APP_ID=" .env || echo "REVERB_APP_ID=$(php -r 'echo bin2hex(random_bytes(16));')" >> .env
+    - grep -q "^REVERB_APP_KEY=" .env || echo "REVERB_APP_KEY=$(php -r 'echo bin2hex(random_bytes(16));')" >> .env
+    - grep -q "^REVERB_APP_SECRET=" .env || echo "REVERB_APP_SECRET=$(php -r 'echo bin2hex(random_bytes(32));')" >> .env
+    - sed -i '/^REVERB_HOST=/d' .env
+    - sed -i '/^REVERB_PORT=/d' .env
+    - sed -i '/^REVERB_SCHEME=/d' .env
+    - APP_URL=$(grep "^APP_URL=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'")
+    - REVERB_HOST=$(echo $APP_URL | sed 's|https\?://||' | sed 's|/.*||')
+    - echo "REVERB_HOST=$REVERB_HOST" >> .env
+    - echo "REVERB_PORT=443" >> .env
+    - echo "REVERB_SCHEME=https" >> .env
+    - grep -q "^VITE_REVERB_APP_KEY=" .env || sed -i "/^REVERB_APP_KEY=/a VITE_REVERB_APP_KEY=$(grep '^REVERB_APP_KEY=' .env | cut -d '=' -f2)" .env
+    - grep -q "^VITE_REVERB_HOST=" .env || sed -i "/^REVERB_HOST=/a VITE_REVERB_HOST=$REVERB_HOST" .env
+    - grep -q "^VITE_REVERB_PORT=" .env || echo "VITE_REVERB_PORT=443" >> .env
+    - grep -q "^VITE_REVERB_SCHEME=" .env || echo "VITE_REVERB_SCHEME=https" >> .env
     - php artisan migrate --force
     - php artisan db:seed --class=UserSeeder --force
     - php artisan config:clear
