@@ -1345,7 +1345,7 @@ const formatRecordingTime = (seconds) => {
                     :class="{ 'justify-end': message.user_id === $page.props.auth.user.id }"
                 >
                     <div
-                        class="single-message mb-4 max-w-[90%] break-words rounded-bl-lg rounded-br-lg rounded-tl-lg px-4 py-2 text-gray-200 relative group"
+                        class="single-message mb-4 max-w-[57%] break-words rounded-bl-lg rounded-br-lg rounded-tl-lg px-4 py-2 text-gray-200 relative group"
                         :class="{ user: message.user_id === $page.props.auth.user.id }"
                     >
                         <!-- Attachments -->

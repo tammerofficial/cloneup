@@ -28,7 +28,7 @@ class SendMessageRequest extends FormRequest
             'attachments.*' => [
                 'file',
                 'max:10240', // 10MB
-                'mimetypes:image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4,video/avi,video/quicktime,video/x-matroska,audio/mpeg,audio/wav,audio/ogg,audio/mp4,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip,application/x-rar-compressed'
+                'mimetypes:image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4,video/avi,video/quicktime,video/x-matroska,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/x-webm,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip,application/x-rar-compressed'
             ],
         ];
     }
