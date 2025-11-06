@@ -90,10 +90,14 @@ VITE_REVERB_SCHEME="${REVERB_SCHEME}"
 ENVCPANEL
     - for K in APP_NAME APP_ENV APP_KEY APP_DEBUG APP_URL APP_LOCALE APP_FALLBACK_LOCALE APP_FAKER_LOCALE APP_MAINTENANCE_DRIVER PHP_CLI_SERVER_WORKERS BCRYPT_ROUNDS LOG_CHANNEL LOG_STACK LOG_DEPRECATIONS_CHANNEL LOG_LEVEL DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD SESSION_DRIVER SESSION_LIFETIME SESSION_ENCRYPT SESSION_PATH SESSION_DOMAIN BROADCAST_CONNECTION FILESYSTEM_DISK QUEUE_CONNECTION CACHE_STORE MEMCACHED_HOST REDIS_CLIENT REDIS_HOST REDIS_PASSWORD REDIS_PORT MAIL_MAILER MAIL_SCHEME MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_PASSWORD MAIL_FROM_ADDRESS MAIL_FROM_NAME AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_BUCKET AWS_USE_PATH_STYLE_ENDPOINT VITE_APP_NAME REVERB_APP_ID REVERB_APP_KEY REVERB_APP_SECRET REVERB_HOST REVERB_PORT REVERB_SCHEME VITE_REVERB_APP_KEY VITE_REVERB_HOST VITE_REVERB_PORT VITE_REVERB_SCHEME; do sed -i \"/^$K=/d\" .env; done
     - cat .env.cpanel >> .env
+    # Fully disable realtime on production (clean, no WebSocket attempts)
+    - sed -i '/^BROADCAST_CONNECTION=/d' .env
+    - echo "BROADCAST_CONNECTION=null" >> .env
     - sed -i '/^VITE_ENABLE_ECHO=/d' .env
-    - echo "VITE_ENABLE_ECHO=true" >> .env
-    # Ensure Reverb keys exist if left empty
-    - php -r '$p=\".env\";$s=file_get_contents($p);$set=function($k,$v)use(&$s){$s=preg_replace(\"/^{$k}=.*$/m\",\"{$k}={$v}\",$s,1,$c);if(!$c)$s.=\"\\n{$k}={$v}\\n\";};if(preg_match(\"/^REVERB_APP_ID=\\s*$/m\",$s)){$set(\"REVERB_APP_ID\",bin2hex(random_bytes(16)));}if(preg_match(\"/^REVERB_APP_KEY=\\s*$/m\",$s)){$v=bin2hex(random_bytes(16));$set(\"REVERB_APP_KEY\",$v);$set(\"VITE_REVERB_APP_KEY\",$v);}if(preg_match(\"/^REVERB_APP_SECRET=\\s*$/m\",$s)){$set(\"REVERB_APP_SECRET\",bin2hex(random_bytes(32)));}file_put_contents($p,$s);'
+    - echo "VITE_ENABLE_ECHO=false" >> .env
+    # Remove any Reverb vars to avoid leaking localhost defaults in built assets
+    - sed -i '/^REVERB_/d' .env
+    - sed -i '/^VITE_REVERB_/d' .env
     - sed -i '/^VITE_ENABLE_ECHO=/d' .env
     - echo "VITE_ENABLE_ECHO=false" >> .env
     - composer install --optimize-autoloader --no-dev --no-interaction
