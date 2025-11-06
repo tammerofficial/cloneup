@@ -22,16 +22,6 @@ deployment:
     - /bin/cp -R public/* $DEPLOYPATH/
     - /bin/cp public/.htaccess $DEPLOYPATH/
     - cd $PROJECTPATH
-    - composer install --optimize-autoloader --no-dev --no-interaction
-    - npm install --production
-    - npm run build
-    - /bin/cp -R public/build $DEPLOYPATH/
-    - cd $DEPLOYPATH
-    - rm -f storage
-    - ln -s $PROJECTPATH/storage/app/public storage
-    - cd $PROJECTPATH
-    - chmod -R 775 storage
-    - chmod -R 775 bootstrap/cache
     - test -f .env || cp .env.example .env
     - sed -i 's/DB_CONNECTION=msyql/DB_CONNECTION=mysql/g' .env
     - sed -i 's/DB_CONNECTION=msql/DB_CONNECTION=mysql/g' .env
@@ -41,6 +31,17 @@ deployment:
     - php -r "if(!file_exists('.env') || !strpos(file_get_contents('.env'), 'REVERB_APP_KEY')) { \$key = bin2hex(random_bytes(16)); file_put_contents('.env', \"REVERB_APP_KEY=\$key\nVITE_REVERB_APP_KEY=\$key\n\", FILE_APPEND); }"
     - php -r "if(!file_exists('.env') || !strpos(file_get_contents('.env'), 'REVERB_APP_SECRET')) { \$secret = bin2hex(random_bytes(32)); file_put_contents('.env', \"REVERB_APP_SECRET=\$secret\n\", FILE_APPEND); }"
     - php -r "\$env = file_get_contents('.env'); \$appUrl = preg_match('/APP_URL=(.+)/', \$env, \$m) ? trim(\$m[1], '\"\\'') : ''; \$host = preg_replace('/https?:\\/\\//', '', \$appUrl); \$host = preg_replace('/\\/.*/', '', \$host); \$env = preg_replace('/^REVERB_HOST=.*\\n/m', '', \$env); \$env = preg_replace('/^REVERB_PORT=.*\\n/m', '', \$env); \$env = preg_replace('/^REVERB_SCHEME=.*\\n/m', '', \$env); \$env = preg_replace('/^VITE_REVERB_HOST=.*\\n/m', '', \$env); \$env = preg_replace('/^VITE_REVERB_PORT=.*\\n/m', '', \$env); \$env = preg_replace('/^VITE_REVERB_SCHEME=.*\\n/m', '', \$env); if(\$host) { \$env .= \"REVERB_HOST=\$host\\nREVERB_PORT=443\\nREVERB_SCHEME=https\\nVITE_REVERB_HOST=\$host\\nVITE_REVERB_PORT=443\\nVITE_REVERB_SCHEME=https\\n\"; } file_put_contents('.env', \$env);"
+    - composer install --optimize-autoloader --no-dev --no-interaction
+    - npm install --production
+    - rm -rf $DEPLOYPATH/build
+    - npm run build
+    - /bin/cp -R public/build $DEPLOYPATH/
+    - cd $DEPLOYPATH
+    - rm -f storage
+    - ln -s $PROJECTPATH/storage/app/public storage
+    - cd $PROJECTPATH
+    - chmod -R 775 storage
+    - chmod -R 775 bootstrap/cache
     - php artisan migrate --force
     - php artisan db:seed --class=UserSeeder --force
     - php artisan config:clear
