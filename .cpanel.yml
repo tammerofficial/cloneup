@@ -16,15 +16,20 @@ deployment:
     - mkdir -p $PROJECTPATH
     
     # نسخ جميع ملفات Laravel من المستودع إلى مجلد المشروع
-    # استثناء: node_modules, vendor, .git, storage (لأنها قد تحتوي على بيانات)
+    # ⚠️ مهم: لا ننسخ ملف .env (يحتوي على معلومات حساسة للإنتاج)
+    # ⚠️ استثناء: .env, node_modules, vendor, .git, storage (لأنها قد تحتوي على بيانات)
     - /bin/cp -R app bootstrap config database resources routes tests $PROJECTPATH/ 2>/dev/null || true
     - /bin/cp artisan composer.json composer.lock package.json package-lock.json $PROJECTPATH/ 2>/dev/null || true
     - /bin/cp vite.config.ts tsconfig.json tailwind.config.js $PROJECTPATH/ 2>/dev/null || true
-    - /bin/cp .htaccess $PROJECTPATH/ 2>/dev/null || true
+    # نسخ .htaccess فقط إذا لم يكن موجوداً (لحماية الإعدادات الخاصة على السيرفر)
+    - if [ ! -f "$PROJECTPATH/.htaccess" ]; then /bin/cp .htaccess $PROJECTPATH/ 2>/dev/null || true; fi
+    # نسخ .env.example كمرجع فقط (إذا كان موجوداً)
+    - /bin/cp .env.example $PROJECTPATH/ 2>/dev/null || true
     
     # نسخ محتويات مجلد public إلى public_html
     - /bin/cp -R public/* $DEPLOYPATH/ 2>/dev/null || true
-    - /bin/cp public/.htaccess $DEPLOYPATH/ 2>/dev/null || true
+    # نسخ public/.htaccess فقط إذا لم يكن موجوداً (لحماية الإعدادات الخاصة على السيرفر)
+    - if [ ! -f "$DEPLOYPATH/.htaccess" ]; then /bin/cp public/.htaccess $DEPLOYPATH/ 2>/dev/null || true; fi
     
     # الانتقال إلى مجلد المشروع
     - cd $PROJECTPATH
@@ -49,8 +54,18 @@ deployment:
     - chmod -R 775 bootstrap/cache
     
     # تحسين الأداء (Cache) - فقط إذا كان ملف .env موجود
+    # ⚠️ ملاحظة: ملف .env يجب أن يكون موجوداً على السيرفر قبل النشر
+    # ⚠️ ملف .env لا يُرفع من GitHub لأسباب أمنية
     - if [ -f .env ]; then php artisan config:cache 2>/dev/null || true; fi
     - if [ -f .env ]; then php artisan route:cache 2>/dev/null || true; fi
     - if [ -f .env ]; then php artisan view:cache 2>/dev/null || true; fi
     - if [ -f .env ]; then php artisan event:cache 2>/dev/null || true; fi
+    
+    # تحذير إذا لم يكن ملف .env موجوداً
+    - if [ ! -f .env ]; then echo "⚠️  تحذير: ملف .env غير موجود! يرجى إنشاؤه يدوياً على السيرفر."; fi
+    
+    # ملاحظات مهمة:
+    # ⚠️ ملف .env لا يُنسخ من GitHub (يحتوي على معلومات حساسة)
+    # ⚠️ ملف .htaccess لا يُستبدل إذا كان موجوداً على السيرفر (لحماية الإعدادات الخاصة)
+    # ✅ يمكنك تعديل .env و .htaccess يدوياً على السيرفر دون القلق من استبدالها
 

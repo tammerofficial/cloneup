@@ -88,18 +88,55 @@ git clone https://github.com/username/whatsapp-clone.git .
 
 ### 2️⃣ إعداد قاعدة البيانات
 
-1. افتح **MySQL Databases** في cPanel
-2. أنشئ قاعدة بيانات جديدة
-3. أنشئ مستخدم جديد واربطه بقاعدة البيانات
-4. امنح الصلاحيات الكاملة للمستخدم
+#### الطريقة الأولى: إنشاء قاعدة بيانات جديدة (موصى بها)
+
+1. افتح **phpMyAdmin** في cPanel
+2. اضغط على **SQL** tab
+3. انسخ والصق:
+
+```sql
+CREATE DATABASE IF NOT EXISTS `whats` 
+CHARACTER SET utf8mb4 
+COLLATE utf8mb4_unicode_ci;
+```
+
+4. اضغط **Go**
+
+5. أنشئ مستخدم جديد واربطه بقاعدة البيانات:
+   - اذهب إلى **MySQL Databases** في cPanel
+   - أنشئ مستخدم جديد
+   - اربط المستخدم بقاعدة البيانات `whats`
+   - امنح الصلاحيات الكاملة
+
+#### الطريقة الثانية: استيراد ملف SQL
+
+**⚠️ إذا واجهت خطأ `Unknown collation: 'utf8mb4_0900_ai_ci'`:**
+
+1. استخدم ملف `database/create_database_fixed.sql` بدلاً من ملف SQL الأصلي
+2. أو استخدم سكريبت الإصلاح:
+   ```bash
+   php database/fix_sql_file.php dump.sql dump_fixed.sql
+   ```
+3. راجع ملف `FIX_SQL_COLLATION.md` للتفاصيل الكاملة
 
 ---
 
 ### 3️⃣ إعداد ملف `.env`
 
+**⚠️ مهم جداً:** 
+- ملف `.env` لا يُرفع إلى GitHub لأسباب أمنية!
+- ملف `.htaccess` لا يُستبدل إذا كان موجوداً على السيرفر (لحماية الإعدادات الخاصة)
+
 ```bash
-# في cPanel File Manager، أنشئ ملف .env في الجذر (ليس في public_html)
-cd ~
+# في cPanel File Manager، أنشئ ملف .env في مجلد المشروع
+cd ~/whatsapp-clone
+nano .env
+```
+
+**أو استخدم .env.example كمرجع:**
+```bash
+cd ~/whatsapp-clone
+cp .env.example .env
 nano .env
 ```
 
@@ -120,9 +157,11 @@ LOG_LEVEL=debug
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=your_database_name
+DB_DATABASE=whats
 DB_USERNAME=your_database_user
 DB_PASSWORD=your_database_password
+DB_CHARSET=utf8mb4
+DB_COLLATION=utf8mb4_unicode_ci
 
 BROADCAST_CONNECTION=reverb
 REVERB_APP_ID=your-app-id
@@ -300,20 +339,32 @@ php artisan view:cache
 
 ## ⚠️ حل المشاكل الشائعة
 
-### 1. خطأ 500 Internal Server Error
+### 1. خطأ Collation: `Unknown collation: 'utf8mb4_0900_ai_ci'`
+
+**السبب:** ملف SQL يحتوي على collation خاص بـ MySQL 8.0+ غير مدعوم في cPanel
+
+**الحل:**
+1. استخدم ملف `database/create_database_fixed.sql` لإنشاء قاعدة البيانات
+2. أو أصلح ملف SQL باستخدام:
+   ```bash
+   php database/fix_sql_file.php dump.sql dump_fixed.sql
+   ```
+3. راجع ملف `FIX_SQL_COLLATION.md` للتفاصيل الكاملة
+
+### 2. خطأ 500 Internal Server Error
 - تحقق من ملف `.env` و `APP_KEY`
 - تحقق من صلاحيات الملفات: `chmod -R 775 storage bootstrap/cache`
 - تحقق من سجلات الأخطاء في `storage/logs/laravel.log`
 
-### 2. خطأ 404 Not Found
+### 3. خطأ 404 Not Found
 - تأكد من تفعيل `mod_rewrite` في Apache
 - تحقق من ملف `.htaccess` في `public_html`
 
-### 3. مشاكل في الصور/الملفات
+### 4. مشاكل في الصور/الملفات
 - تأكد من إنشاء رابط `storage:link`
 - تحقق من صلاحيات مجلد `storage/app/public`
 
-### 4. مشاكل في Vite Assets
+### 5. مشاكل في Vite Assets
 - تأكد من تشغيل `npm run build`
 - تحقق من `APP_URL` في `.env`
 - تأكد من وجود مجلد `public/build`

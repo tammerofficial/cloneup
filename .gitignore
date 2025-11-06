@@ -10,6 +10,15 @@
 .env
 .env.backup
 .env.production
+.env.local
+.env.*.local
+
+# ⚠️ مهم: ملف .env لا يُرفع إلى GitHub لأسباب أمنية
+# ملف .env يحتوي على معلومات حساسة مثل:
+# - مفاتيح قاعدة البيانات
+# - API keys
+# - APP_KEY
+# وغيرها من المعلومات السرية
 .phpactor.json
 .phpunit.result.cache
 Homestead.json
