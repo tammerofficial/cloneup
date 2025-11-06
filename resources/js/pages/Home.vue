@@ -83,6 +83,40 @@ const currentlyPlayingType = ref(null); // 'audio' | 'video' | null
 let currentAudioEl = null;
 let currentVideoEl = null;
 
+// Sidebar resize
+const sidebarWidth = ref(360); // initial width in px
+const isResizingSidebar = ref(false);
+const minSidebarWidth = 260;
+const maxSidebarWidth = 720;
+let sidebarStartX = 0;
+let sidebarStartWidth = 360;
+
+function startSidebarResize(e) {
+    isResizingSidebar.value = true;
+    sidebarStartX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    sidebarStartWidth = sidebarWidth.value;
+    document.body.classList.add('select-none');
+}
+
+function onSidebarResize(e) {
+    if (!isResizingSidebar.value) return;
+    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    const delta = clientX - sidebarStartX;
+    let next = sidebarStartWidth + delta;
+    if (next < minSidebarWidth) next = minSidebarWidth;
+    if (next > maxSidebarWidth) next = maxSidebarWidth;
+    sidebarWidth.value = next;
+}
+
+function stopSidebarResize() {
+    if (!isResizingSidebar.value) return;
+    isResizingSidebar.value = false;
+    document.body.classList.remove('select-none');
+    try {
+        localStorage.setItem('sidebarWidth', String(sidebarWidth.value));
+    } catch (e) {}
+}
+
 function pauseCurrentMedia(exceptEl = null) {
     if (currentAudioEl && currentAudioEl !== exceptEl) {
         try { currentAudioEl.pause(); } catch (e) {}
@@ -107,7 +141,20 @@ function handleVideoPlay(messageId, el) {
 }
 
 function handleAudioEnded(messageId, el) {
-    // Auto-play next voice message in the list
+    // Try next audio within the same message first
+    const audiosInSameMessage = Array.from(document.querySelectorAll(`audio[data-message-id="${messageId}"]`));
+    if (audiosInSameMessage.length > 1) {
+        const idx = audiosInSameMessage.indexOf(el);
+        if (idx > -1 && idx + 1 < audiosInSameMessage.length) {
+            const nextInSame = audiosInSameMessage[idx + 1];
+            pauseCurrentMedia(nextInSame);
+            currentlyPlayingType.value = 'audio';
+            currentAudioEl = nextInSame;
+            try { nextInSame.play(); } catch (e) {}
+            return;
+        }
+    }
+    // Otherwise, auto-play next voice message in subsequent messages
     playNextVoiceFrom(messageId);
 }
 
@@ -152,6 +199,20 @@ onMounted(() => {
             isInitialized.value = true;
         }
     }, 1000);
+
+    // Init sidebar width from localStorage
+    try {
+        const stored = Number(localStorage.getItem('sidebarWidth'));
+        if (!Number.isNaN(stored) && stored >= minSidebarWidth && stored <= maxSidebarWidth) {
+            sidebarWidth.value = stored;
+        }
+    } catch (e) {}
+
+    // Attach resize listeners
+    document.addEventListener('mousemove', onSidebarResize);
+    document.addEventListener('mouseup', stopSidebarResize);
+    document.addEventListener('touchmove', onSidebarResize, { passive: false });
+    document.addEventListener('touchend', stopSidebarResize);
 });
 
 onBeforeMount(() => {
@@ -212,6 +273,12 @@ onBeforeUnmount(() => {
     if (recordingInterval.value) {
         clearInterval(recordingInterval.value);
     }
+    
+    // Detach sidebar resize listeners
+    document.removeEventListener('mousemove', onSidebarResize);
+    document.removeEventListener('mouseup', stopSidebarResize);
+    document.removeEventListener('touchmove', onSidebarResize);
+    document.removeEventListener('touchend', stopSidebarResize);
     
     window.Echo.leave(`chat.start.user.${page.props.auth.user.id}`);
 
@@ -1190,7 +1257,8 @@ const formatRecordingTime = (seconds) => {
 
     <div v-else class="flex h-screen w-full bg-black">
         <aside
-            class="relative flex w-[22rem] shrink-0 flex-col overflow-y-auto border-r border-gray-800 bg-gray-200 md:w-[30rem] lg:w-[35rem] xl:w-[40rem]"
+            class="relative flex shrink-0 flex-col overflow-y-auto border-r border-gray-800 bg-gray-200"
+            :style="{ width: sidebarWidth + 'px' }"
         >
             <div class="aside-header sticky left-0 right-0 top-0 z-40 text-gray-400">
                 <div class="flex items-center bg-[#131C21] px-4 py-6">
