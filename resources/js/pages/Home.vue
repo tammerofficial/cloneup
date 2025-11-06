@@ -78,6 +78,66 @@ const audioChunks = ref([]);
 const recordingInterval = ref(null);
 const audioBlob = ref(null);
 
+// Media playback control (single media at a time)
+const currentlyPlayingType = ref(null); // 'audio' | 'video' | null
+let currentAudioEl = null;
+let currentVideoEl = null;
+
+function pauseCurrentMedia(exceptEl = null) {
+    if (currentAudioEl && currentAudioEl !== exceptEl) {
+        try { currentAudioEl.pause(); } catch (e) {}
+    }
+    if (currentVideoEl && currentVideoEl !== exceptEl) {
+        try { currentVideoEl.pause(); } catch (e) {}
+    }
+}
+
+function handleAudioPlay(messageId, el) {
+    // Enforce single-media policy
+    pauseCurrentMedia(el);
+    currentlyPlayingType.value = 'audio';
+    currentAudioEl = el;
+}
+
+function handleVideoPlay(messageId, el) {
+    // Enforce single-media policy
+    pauseCurrentMedia(el);
+    currentlyPlayingType.value = 'video';
+    currentVideoEl = el;
+}
+
+function handleAudioEnded(messageId, el) {
+    // Auto-play next voice message in the list
+    playNextVoiceFrom(messageId);
+}
+
+function playNextVoiceFrom(messageId) {
+    const idx = currentChat.value.messages.findIndex((m) => m.id === messageId);
+    if (idx === -1) return;
+    for (let i = idx + 1; i < currentChat.value.messages.length; i++) {
+        const msg = currentChat.value.messages[i];
+        if (msg && Array.isArray(msg.attachments)) {
+            const hasAudio = msg.attachments.some((att) => att && ((att.file_type === 'audio') || getFileTypeFromMime(att.mime_type) === 'audio'));
+            if (hasAudio) {
+                // Find audio element for this message and play it
+                const nextAudio = document.querySelector(`audio[data-message-id="${msg.id}"]`);
+                if (nextAudio) {
+                    // Scroll into view and play
+                    const container = document.querySelector(`[data-message-id="${msg.id}"]`) || nextAudio;
+                    try {
+                        container?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } catch (e) {}
+                    // Enforce single media
+                    pauseCurrentMedia(nextAudio);
+                    currentlyPlayingType.value = 'audio';
+                    currentAudioEl = nextAudio;
+                    try { nextAudio.play(); } catch (e) {}
+                }
+                break;
+            }
+        }
+    }
+}
 onMounted(() => {
     newChats.value = page.props.chats.filter((chat) => chat.unread_messages > 0).length;
 
@@ -1379,6 +1439,8 @@ const formatRecordingTime = (seconds) => {
                                         :src="attachment.file_url"
                                         controls
                                         class="max-w-full h-auto"
+                                        :data-message-id="message.id"
+                                        @play="handleVideoPlay(message.id, $event.target)"
                                     ></video>
                                     <div v-else class="h-48 flex items-center justify-center">
                                         <span class="pi pi-video text-4xl text-gray-400"></span>
@@ -1403,6 +1465,9 @@ const formatRecordingTime = (seconds) => {
                                             :src="attachment.file_url"
                                             controls
                                             class="w-full mt-1"
+                                            :data-message-id="message.id"
+                                            @play="handleAudioPlay(message.id, $event.target)"
+                                            @ended="handleAudioEnded(message.id, $event.target)"
                                         ></audio>
                                     </div>
                                 </div>
