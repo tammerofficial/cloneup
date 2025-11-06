@@ -70,6 +70,14 @@ const deletingMessageId = ref(null);
 // Reactions states
 const showingReactionPicker = ref(null);
 
+// Voice recording states
+const isRecording = ref(false);
+const recordingTime = ref(0);
+const mediaRecorder = ref(null);
+const audioChunks = ref([]);
+const recordingInterval = ref(null);
+const audioBlob = ref(null);
+
 onMounted(() => {
     newChats.value = page.props.chats.filter((chat) => chat.unread_messages > 0).length;
 
@@ -136,6 +144,15 @@ onBeforeMount(() => {
 });
 
 onBeforeUnmount(() => {
+    // Clean up recording
+    if (isRecording.value) {
+        cancelVoiceRecording();
+    }
+    
+    if (recordingInterval.value) {
+        clearInterval(recordingInterval.value);
+    }
+    
     window.Echo.leave(`chat.start.user.${page.props.auth.user.id}`);
 
     for (const chat of page.props.chats) {
@@ -920,6 +937,186 @@ const toggleReaction = (messageId, reaction) => {
         addReactionToMessage(messageId, reaction);
     }
 };
+
+// Voice recording functions
+const startVoiceRecording = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        
+        mediaRecorder.value = recorder;
+        audioChunks.value = [];
+        recordingTime.value = 0;
+        
+        recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.value.push(event.data);
+            }
+        };
+        
+        recorder.onstop = () => {
+            const audioBlobData = new Blob(audioChunks.value, { type: 'audio/webm' });
+            audioBlob.value = audioBlobData;
+            
+            // Stop all tracks
+            stream.getTracks().forEach(track => track.stop());
+        };
+        
+        recorder.start();
+        isRecording.value = true;
+        
+        // Start timer
+        recordingInterval.value = setInterval(() => {
+            recordingTime.value++;
+        }, 1000);
+        
+        toast.add({
+            severity: 'info',
+            summary: 'Recording',
+            detail: 'Voice recording started',
+            life: 2000,
+        });
+    } catch (error) {
+        console.error('Error starting recording:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to start recording. Please check microphone permissions.',
+            life: 5000,
+        });
+    }
+};
+
+const stopVoiceRecording = () => {
+    if (mediaRecorder.value && isRecording.value) {
+        mediaRecorder.value.stop();
+        isRecording.value = false;
+        
+        if (recordingInterval.value) {
+            clearInterval(recordingInterval.value);
+            recordingInterval.value = null;
+        }
+        
+        // Wait for blob to be ready
+        setTimeout(() => {
+            if (audioBlob.value) {
+                toast.add({
+                    severity: 'success',
+                    summary: 'Recording Stopped',
+                    detail: 'Voice recording completed. Click send to share.',
+                    life: 3000,
+                });
+            }
+        }, 100);
+    }
+};
+
+const cancelVoiceRecording = () => {
+    if (mediaRecorder.value) {
+        if (isRecording.value) {
+            mediaRecorder.value.stop();
+        }
+        isRecording.value = false;
+        audioChunks.value = [];
+        audioBlob.value = null;
+        recordingTime.value = null;
+        
+        if (recordingInterval.value) {
+            clearInterval(recordingInterval.value);
+            recordingInterval.value = null;
+        }
+        
+        // Stop all tracks if stream exists
+        if (mediaRecorder.value.stream) {
+            mediaRecorder.value.stream.getTracks().forEach(track => track.stop());
+        }
+    } else {
+        // Clean up if no recorder but state is set
+        isRecording.value = false;
+        audioChunks.value = [];
+        audioBlob.value = null;
+        recordingTime.value = 0;
+        
+        if (recordingInterval.value) {
+            clearInterval(recordingInterval.value);
+            recordingInterval.value = null;
+        }
+    }
+};
+
+const sendVoiceRecording = async () => {
+    if (!audioBlob.value || recordingTime.value === 0) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'No recording to send',
+            life: 3000,
+        });
+        return;
+    }
+    
+    if (isSendingMessage.value) return;
+    
+    isSendingMessage.value = true;
+    
+    // Convert blob to file
+    const audioFile = new File([audioBlob.value], `voice_${Date.now()}.webm`, {
+        type: 'audio/webm'
+    });
+    
+    const formData = new FormData();
+    formData.append('chat_id', currentChat.value.id);
+    formData.append('attachments[]', audioFile);
+    
+    try {
+        const response = await axios.post('/chat/message', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        
+        currentChat.value.messages.push(response.data.message);
+        
+        const chat = page.props.chats.find((chat) => chat.id === currentChat.value.id);
+        chat.last_message = 'Voice message';
+        chat.last_message_created_at = response.data.message.created_at;
+        
+        page.props.chats.splice(page.props.chats.indexOf(chat), 1);
+        page.props.chats.unshift(chat);
+        
+        // Reset recording
+        audioBlob.value = null;
+        audioChunks.value = [];
+        recordingTime.value = 0;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Voice message sent',
+            life: 3000,
+        });
+    } catch (error) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.response?.data?.message ?? error.response?.data ?? 'Failed to send voice message',
+            life: 5000,
+        });
+    } finally {
+        isSendingMessage.value = false;
+        
+        nextTick(() => {
+            messageInput.value?.focus();
+            scrollToBottom();
+        });
+    }
+};
+
+const formatRecordingTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+};
 </script>
 
 <template>
@@ -1399,11 +1596,59 @@ const toggleReaction = (messageId, reaction) => {
                         <span 
                             @click="attachmentInput?.click()" 
                             class="pi pi-paperclip -mt-1 ml-2 inline h-6 w-6 cursor-pointer"
+                            v-tooltip="'Attach File'"
+                        > </span>
+                        <span
+                            v-if="!isRecording"
+                            @mousedown="startVoiceRecording"
+                            @touchstart="startVoiceRecording"
+                            class="pi pi-microphone -mt-1 ml-2 inline h-6 w-6 cursor-pointer text-red-400 hover:text-red-300"
+                            v-tooltip="'Hold to record voice'"
                         > </span>
                     </div>
                     <div class="flex-grow">
                         <div class="w-full px-4 py-2">
-                            <form @submit.prevent="sendMessage">
+                            <!-- Recording UI -->
+                            <div v-if="isRecording" class="flex items-center gap-3 bg-red-600 rounded-full px-4 py-3">
+                                <div class="flex items-center gap-2 flex-1">
+                                    <span class="pi pi-circle-fill text-white animate-pulse" style="font-size: 0.75rem"></span>
+                                    <span class="text-white text-sm font-semibold">{{ formatRecordingTime(recordingTime) }}</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        @click="cancelVoiceRecording"
+                                        class="pi pi-times text-white cursor-pointer hover:text-gray-200"
+                                        v-tooltip="'Cancel'"
+                                    ></span>
+                                    <span
+                                        @click="stopVoiceRecording"
+                                        class="pi pi-check text-white cursor-pointer hover:text-gray-200"
+                                        v-tooltip="'Stop & Send'"
+                                    ></span>
+                                </div>
+                            </div>
+                            <!-- Voice recording ready to send -->
+                            <div v-else-if="audioBlob && recordingTime > 0" class="flex items-center gap-3 bg-gray-700 rounded-full px-4 py-3">
+                                <div class="flex items-center gap-2 flex-1">
+                                    <span class="pi pi-volume-up text-gray-300"></span>
+                                    <span class="text-white text-sm">{{ formatRecordingTime(recordingTime) }}</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        @click="cancelVoiceRecording"
+                                        class="pi pi-times text-gray-400 cursor-pointer hover:text-red-400"
+                                        v-tooltip="'Cancel'"
+                                    ></span>
+                                    <span
+                                        @click="sendVoiceRecording"
+                                        :class="{ 'pi pi-spin pi-spinner': isSendingMessage }"
+                                        class="pi pi-send text-green-400 cursor-pointer hover:text-green-300"
+                                        v-tooltip="'Send'"
+                                    ></span>
+                                </div>
+                            </div>
+                            <!-- Normal message input -->
+                            <form v-else @submit.prevent="sendMessage">
                                 <div class="relative text-gray-600 focus-within:text-gray-200">
                                     <input
                                         ref="messageInput"
@@ -1411,7 +1656,7 @@ const toggleReaction = (messageId, reaction) => {
                                         placeholder="Type a message"
                                         autocomplete="off"
                                         v-model="currentMessage"
-                                        :disabled="isSendingMessage"
+                                        :disabled="isSendingMessage || isRecording"
                                     />
                                 </div>
                             </form>
@@ -1419,6 +1664,7 @@ const toggleReaction = (messageId, reaction) => {
                     </div>
                     <div class="flex-none text-right">
                         <span
+                            v-if="!isRecording && !audioBlob"
                             @click="sendMessage"
                             :class="{ 'pi pi-spin pi-spinner': isSendingMessage }"
                             class="pi pi-send mt-2 inline cursor-pointer"
@@ -1488,5 +1734,19 @@ const toggleReaction = (messageId, reaction) => {
     100% {
         background-color: transparent;
     }
+}
+
+/* Voice recording animation */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 </style>
