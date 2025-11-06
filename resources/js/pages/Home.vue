@@ -83,6 +83,100 @@ const currentlyPlayingType = ref(null); // 'audio' | 'video' | null
 let currentAudioEl = null;
 let currentVideoEl = null;
 
+// Screen size helper
+const isSmallScreen = ref(false);
+function updateScreen() {
+    try {
+        isSmallScreen.value = window.innerWidth < 768; // md breakpoint
+    } catch (e) {
+        isSmallScreen.value = false;
+    }
+}
+
+// Touch detection
+const isTouch = ref(false);
+function detectTouch() {
+    try {
+        isTouch.value = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+    } catch (e) {
+        isTouch.value = false;
+    }
+}
+
+// Image viewer (lightbox)
+const isImageViewerOpen = ref(false);
+const imageViewerImages = ref([]); // [{ url, thumb, messageId }]
+const imageViewerIndex = ref(0);
+const imageViewerEl = ref(null);
+let viewerSwipeStartX = 0;
+let viewerSwipeStartY = 0;
+
+function openImageViewer(message, attachment) {
+    if (!attachment?.file_url) return;
+    const images = (message.attachments || []).filter((att) => {
+        return att && (att.file_type === 'image' || getFileTypeFromMime(att.mime_type) === 'image') && att.file_url;
+    });
+    imageViewerImages.value = images.map((att) => ({
+        url: att.file_url,
+        thumb: att.thumbnail_url || att.file_url,
+        messageId: message.id,
+    }));
+    const idx = imageViewerImages.value.findIndex((x) => x.url === attachment.file_url);
+    imageViewerIndex.value = idx >= 0 ? idx : 0;
+    isImageViewerOpen.value = true;
+    nextTick(() => {
+        try { imageViewerEl.value?.focus(); } catch (e) {}
+    });
+}
+
+function closeImageViewer() {
+    isImageViewerOpen.value = false;
+}
+
+function nextImage() {
+    if (!imageViewerImages.value.length) return;
+    imageViewerIndex.value = (imageViewerIndex.value + 1) % imageViewerImages.value.length;
+}
+
+function prevImage() {
+    if (!imageViewerImages.value.length) return;
+    imageViewerIndex.value = (imageViewerIndex.value - 1 + imageViewerImages.value.length) % imageViewerImages.value.length;
+}
+
+function onViewerKeydown(e) {
+    if (e.key === 'Escape') {
+        e.preventDefault(); closeImageViewer();
+    } else if (e.key === 'ArrowRight') {
+        e.preventDefault(); nextImage();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault(); prevImage();
+    }
+}
+
+function onViewerTouchStart(e) {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    viewerSwipeStartX = t.clientX;
+    viewerSwipeStartY = t.clientY;
+}
+
+function onViewerTouchEnd(e) {
+    const t = (e.changedTouches && e.changedTouches[0]) || null;
+    if (!t) return;
+    const dx = t.clientX - viewerSwipeStartX;
+    const dy = Math.abs(t.clientY - viewerSwipeStartY);
+    // Horizontal swipe -> next/prev
+    if (Math.abs(dx) > 50 && dy < 40) {
+        if (dx < 0) nextImage();
+        else prevImage();
+        return;
+    }
+    // Vertical swipe down -> close
+    if ((t.clientY - viewerSwipeStartY) > 70 && Math.abs(dx) < 40) {
+        closeImageViewer();
+    }
+}
+
 // Sidebar resize
 const sidebarWidth = ref(360); // initial width in px
 const isResizingSidebar = ref(false);
@@ -185,10 +279,42 @@ function playNextVoiceFrom(messageId) {
         }
     }
 }
+
+// Simple back-swipe on touch devices (small screens)
+let swipeStartX = 0;
+let swipeStartY = 0;
+function handleSwipeStart(e) {
+    if (!isSmallScreen.value) return;
+    try {
+        const t = e.touches && e.touches[0];
+        if (!t) return;
+        swipeStartX = t.clientX;
+        swipeStartY = t.clientY;
+    } catch (err) {}
+}
+function handleSwipeEnd(e) {
+    if (!isSmallScreen.value) return;
+    try {
+        const t = (e.changedTouches && e.changedTouches[0]) || null;
+        if (!t) return;
+        const dx = t.clientX - swipeStartX;
+        const dy = Math.abs(t.clientY - swipeStartY);
+        // Right-swipe from left edge goes back to chats
+        if (swipeStartX < 30 && dx > 60 && dy < 40) {
+            showChat.value = false;
+        }
+    } catch (err) {}
+}
 onMounted(() => {
     newChats.value = page.props.chats.filter((chat) => chat.unread_messages > 0).length;
 
     setupEmojiPicker();
+
+    // Screen breakpoint
+    updateScreen();
+    window.addEventListener('resize', updateScreen);
+    detectTouch();
+    window.addEventListener('orientationchange', detectTouch);
 
     // Simulate loading
     const interval = setInterval(() => {
@@ -279,6 +405,8 @@ onBeforeUnmount(() => {
     document.removeEventListener('mouseup', stopSidebarResize);
     document.removeEventListener('touchmove', onSidebarResize);
     document.removeEventListener('touchend', stopSidebarResize);
+    window.removeEventListener('resize', updateScreen);
+    window.removeEventListener('orientationchange', detectTouch);
     
     window.Echo.leave(`chat.start.user.${page.props.auth.user.id}`);
 
@@ -1257,6 +1385,7 @@ const formatRecordingTime = (seconds) => {
 
     <div v-else class="flex h-screen w-full bg-black">
         <aside
+            v-show="!isSmallScreen || (isSmallScreen && !showChat)"
             class="relative flex shrink-0 flex-col overflow-y-auto border-r border-gray-800 bg-gray-200"
             :style="{ width: sidebarWidth + 'px' }"
         >
@@ -1416,6 +1545,12 @@ const formatRecordingTime = (seconds) => {
                     </div>
                 </div>
             </div>
+            <!-- Resize handle (desktop/tablet only) -->
+            <div
+                :class="[isTouch ? 'w-3' : 'w-1', 'absolute top-0 right-0 h-full cursor-col-resize bg-transparent hover:bg-gray-400/20 md:block hidden']"
+                @mousedown.prevent="startSidebarResize"
+                @touchstart.prevent="startSidebarResize"
+            ></div>
         </aside>
         <div v-if="!showChat" class="flex w-full bg-[#222E35]">
             <div class="m-auto flex flex-col items-center gap-4">
@@ -1431,6 +1566,8 @@ const formatRecordingTime = (seconds) => {
             id="messageBody"
             class="bg-whatsapp relative flex w-full flex-col overflow-y-auto"
             @scroll="fetchMoreMessagesOnScroll"
+            @touchstart="handleSwipeStart"
+            @touchend="handleSwipeEnd"
         >
             <div class="main-header sticky left-0 right-0 top-0 z-40 text-gray-400">
                 <div class="flex items-center px-4 py-3">
@@ -1449,8 +1586,15 @@ const formatRecordingTime = (seconds) => {
                         </div>
                     </div>
                     <div class="flex-1 text-right">
+                        <!-- Back (mobile) -->
+                        <span
+                            v-if="isSmallScreen"
+                            :class="['pi pi-arrow-left mr-4 inline cursor-pointer md:hidden', isTouch ? 'h-7 w-7' : 'h-6 w-6']"
+                            v-tooltip="'Back to chats'"
+                            @click="showChat = false"
+                        > </span>
                         <span 
-                            class="pi pi-search mr-5 inline h-6 w-6 cursor-pointer" 
+                            :class="['pi pi-search mr-5 inline cursor-pointer', isTouch ? 'h-7 w-7' : 'h-6 w-6']" 
                             v-tooltip="'Search in Conversation'"
                             @click="showConversationSearch = !showConversationSearch"
                         > </span>
@@ -1473,7 +1617,7 @@ const formatRecordingTime = (seconds) => {
                     :class="{ 'justify-end': message.user_id === $page.props.auth.user.id }"
                 >
                     <div
-                        class="single-message mb-4 max-w-[57%] break-words rounded-bl-lg rounded-br-lg rounded-tl-lg px-4 py-2 text-gray-200 relative group"
+                        class="single-message mb-4 max-w-[85%] md:max-w-[70%] lg:max-w-[57%] break-words rounded-bl-lg rounded-br-lg rounded-tl-lg px-4 py-2 text-gray-200 relative group"
                         :class="{ user: message.user_id === $page.props.auth.user.id }"
                     >
                         <!-- Attachments -->
@@ -1490,7 +1634,7 @@ const formatRecordingTime = (seconds) => {
                                         :src="attachment.thumbnail_url || attachment.file_url"
                                         :alt="attachment.file_name"
                                         class="max-w-full h-auto cursor-pointer rounded-lg"
-                                        @click="attachment.file_url && typeof window !== 'undefined' && window.open(attachment.file_url, '_blank')"
+                                        @click="attachment.file_url && openImageViewer(message, attachment)"
                                         @error="(e) => { console.error('Image load error:', e.target.src); }"
                                     />
                                 </div>
@@ -1665,7 +1809,7 @@ const formatRecordingTime = (seconds) => {
                         <div v-else class="mt-2">
                             <button
                                 @click="showingReactionPicker = showingReactionPicker === message.id ? null : message.id"
-                                class="opacity-0 group-hover:opacity-100 px-2 py-1 rounded-full text-xs bg-gray-700 hover:bg-gray-600 transition-opacity"
+                                :class="[(isTouch ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'), 'px-2 py-1 rounded-full text-xs bg-gray-700 hover:bg-gray-600 transition-opacity']"
                             >
                                 Add reaction
                             </button>
@@ -1836,6 +1980,49 @@ const formatRecordingTime = (seconds) => {
         :result="selectedSearchResult"
         @jump-to-message="jumpToSearchResult"
     />
+
+    <!-- Image Viewer (Lightbox) -->
+    <div
+        v-if="isImageViewerOpen"
+        ref="imageViewerEl"
+        tabindex="0"
+        class="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center"
+        @keydown="onViewerKeydown"
+        @touchstart="onViewerTouchStart"
+        @touchend="onViewerTouchEnd"
+        @click.self="closeImageViewer"
+    >
+        <button
+            class="absolute top-4 right-4 text-white text-xl px-3 py-2 bg-black/50 rounded hover:bg-black/60"
+            @click="closeImageViewer"
+        >✕</button>
+
+        <button
+            class="absolute left-2 md:left-6 text-white text-2xl px-3 py-2 bg-black/40 rounded hover:bg-black/60"
+            @click="prevImage"
+        >‹</button>
+
+        <img
+            :src="imageViewerImages[imageViewerIndex]?.url"
+            class="max-w-[95vw] max-h-[85vh] object-contain rounded select-none"
+            :alt="`image-${imageViewerIndex+1}`"
+            @click="nextImage"
+        />
+
+        <button
+            class="absolute right-2 md:right-6 text-white text-2xl px-3 py-2 bg-black/40 rounded hover:bg-black/60"
+            @click="nextImage"
+        >›</button>
+
+        <div class="absolute bottom-4 left-0 right-0 flex justify-center gap-2 px-4">
+            <span
+                v-for="(img, idx) in imageViewerImages"
+                :key="idx"
+                class="inline-block w-2 h-2 rounded-full"
+                :class="[idx === imageViewerIndex ? 'bg-white' : 'bg-white/40']"
+            ></span>
+        </div>
+    </div>
 </template>
 
 <style>
