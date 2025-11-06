@@ -37,11 +37,11 @@ class UserFactory extends Factory
 
     /**
      * Indicate that the model's email address should be unverified.
+     * Note: This method is kept for compatibility but does nothing
+     * since email_verified_at column doesn't exist in our schema.
      */
     public function unverified(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
+        return $this;
     }
 }
