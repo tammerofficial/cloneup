@@ -26,7 +26,9 @@ deployment:
     - sed -i 's/DB_CONNECTION=msyql/DB_CONNECTION=mysql/g' .env
     - sed -i 's/DB_CONNECTION=msql/DB_CONNECTION=mysql/g' .env
     - grep -q "APP_KEY=" .env || php artisan key:generate --force
-    - grep -q "^BROADCAST_CONNECTION=" .env || echo "BROADCAST_CONNECTION=reverb" >> .env
+    # Disable broadcasting by default on shared hosting to prevent 500s if Reverb isn't running
+    - sed -i '/^BROADCAST_CONNECTION=/d' .env
+    - echo "BROADCAST_CONNECTION=null" >> .env
     - php -r "if(!file_exists('.env') || !strpos(file_get_contents('.env'), 'REVERB_APP_ID')) { \$id = bin2hex(random_bytes(16)); file_put_contents('.env', \"REVERB_APP_ID=\$id\n\", FILE_APPEND); }"
     - php -r "if(!file_exists('.env') || !strpos(file_get_contents('.env'), 'REVERB_APP_KEY')) { \$key = bin2hex(random_bytes(16)); file_put_contents('.env', \"REVERB_APP_KEY=\$key\nVITE_REVERB_APP_KEY=\$key\n\", FILE_APPEND); }"
     - php -r "if(!file_exists('.env') || !strpos(file_get_contents('.env'), 'REVERB_APP_SECRET')) { \$secret = bin2hex(random_bytes(32)); file_put_contents('.env', \"REVERB_APP_SECRET=\$secret\n\", FILE_APPEND); }"
